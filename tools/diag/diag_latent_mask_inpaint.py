@@ -28,11 +28,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 COMFY = "http://127.0.0.1:8188"
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-COMFY_OUT = os.path.join(os.environ.get("QWEN21_COMFY_ROOT",
-                                        r"D:\applications\comfy-ui\ComfyUI_windows_portable"),
+COMFY_OUT = os.path.join(_os.environ.get("QWEN21_COMFY_ROOT"),
                          "ComfyUI", "output")
-COMFY_IN = os.path.join(os.environ.get("QWEN21_COMFY_ROOT",
-                                       r"D:\applications\comfy-ui\ComfyUI_windows_portable"),
+COMFY_IN = os.path.join(_os.environ.get("QWEN21_COMFY_ROOT"),
                         "ComfyUI", "input")
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))

@@ -80,7 +80,7 @@ python tools\diag\diag_port_semantics.py 18660
 | `diag_alpha_scan.py` | 扫描历史产物，统计有多少图真的带透明像素 | 180 张全是 RGBA，但 alpha 都在 252~255（= 视觉全不透明） |
 | `diag_transparent_gen.py` | 端到端：按官方模板生成一张，量 alpha | 官方模板 → **透明像素 70~79%**；`--scan <png>` 可只扫已有产物 |
 | `cmp_alpha.py` | 逐像素比较两张 PNG 的 alpha（判断是否互为反相） | 「和≈255 占比 >90%」即判定为反相 |
-| `accept_transparency.py` | **验收脚本**：文生图 + 编辑两条透明路径，并生成肉眼对照图 | 4 项检查；对照图输出到 `示例效果/透明背景-*-对照.png` |
+| `accept_transparency.py` | **验收脚本**：文生图 + 编辑两条透明路径，并生成肉眼对照图 | 4 项检查；对照图输出到 `示例效果/透明背景-*-对照.png`（该目录不存在时会自动创建） |
 
 ```bat
 python tools\diag\diag_alpha_scan.py            rem 扫历史产物
@@ -101,7 +101,7 @@ python tools\diag\cmp_alpha.py A.png B.png      rem 比两张图的 alpha
 | `diag_latent_mask_inpaint.py` | 潜空间掩码重绘（`SetLatentNoiseMask`）可行性 | ❌ 掩码被无视，仍整图重绘 |
 | `cmp_region_diff.py` | 按"掩码内 / 掩码外"分区统计像素差异 | 掩码外 **100% 被改动** → 掩码路不可用 |
 | `accept_local_edit.py` | **验收脚本**：标注 → 模型重绘 → 按标注合成 | 3 项硬指标；标注区外 **0/1001863 = 0.000%** |
-| `make_sidebyside.py` | 把多张图横向拼成对照图（交付"看得见"的证据） | 供 `示例效果/局部编辑-前后对照.png` 使用 |
+| `make_sidebyside.py` | 把多张图横向拼成对照图（交付"看得见"的证据） | 供 `示例效果/局部编辑-前后对照.png` 使用；仓库不含位图，图由验收脚本现场生成 |
 
 ```bat
 rem 圈住某个区域要求改色（自行调整圆心/半径/诉求）

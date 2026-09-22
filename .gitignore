@@ -1,18 +1,18 @@
 # ============================================================
 #  .gitignore —— Qwen-Image-2.1 本地工作台
 #
-#  原则：只版本化代码与文档。
-#  权重、出图结果、运行日志、打包产物都不入库：
-#    · 权重 17 GB，官网可下载（tools/download.py 一键拉取）
-#    · 出图结果与实验产物是"使用结果"，不是"项目源码"
-#    · config.json 含本机 ComfyUI 路径，各人不同
+#  收录范围：只有**工作台本体 + 使用它所需的文件**。
+#    · 代码：server.py / web/ / 启动脚本 / config.example.json
+#    · 工具：权重下载、环境自检、实测与诊断脚本
+#    · 文档：README + 4 份中文文档
+#  其余一律不入库：模型权重、出图结果、别的任务的实验产物与素材。
 #
-#  ⚠ 注意：.gitignore **不支持行尾注释**，
-#    写成 "outputs/   # 出图结果" 会让整行变成一个无效模式（# 之后算模式的一部分）。
-#    所以下面所有说明都单独成行。
+#  ⚠ 注意：.gitignore **不支持行尾注释**。
+#    写成 "outputs/   # 出图结果" 会让整行变成一个无效模式（# 之后算模式的一部分），
+#    规则会静默失效 —— 这是踩过的坑。
 # ============================================================
 
-# ---------- 模型权重（17 GB，用 tools/download.py 获取）----------
+# ---------- 模型权重（约 17 GB，用 tools/download.py 获取）----------
 models/
 *.safetensors
 *.ckpt
@@ -23,7 +23,7 @@ models/
 # ---------- 运行期产物 ----------
 # 出图结果（按 job_id 分目录）
 outputs/
-# 上传的参考图
+# 用户上传的参考图
 uploads/
 # 分享包 zip
 dist/
@@ -34,10 +34,20 @@ __pycache__/
 *.pyo
 *.log
 
-# ---------- 本机配置（含本机 ComfyUI 路径）----------
+# ---------- 本机配置（含本机 ComfyUI 路径，各人不同）----------
 config.json
 
-# ---------- 批量实验产物（不属于工作台本体，体积大）----------
+# ---------- 所有图片（工作台本身不需要任何位图资源）----------
+# 例外：web/favicon.svg 是页面图标，随代码走
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.gif
+
+# ---------- 别的任务的产物与素材（不属于本工作台）----------
+# 批量出图与实验产物目录
 diag_out/
 diag_out8/
 diag_out9/
@@ -57,6 +67,46 @@ fish_ref/
 grok_logo/
 zcode_logo/
 ppt_zcode/
+# 实测样张目录（由 tools/diag 的验收脚本在你机器上重新生成）
+示例效果/
+
+# ---------- 别的任务的一次性脚本（跑通后留档即可，不是工作台的一部分）----------
+# 实验/批量出图
+tools/style_run.py
+tools/style_run3.py
+tools/style_run4.py
+tools/style_run5.py
+tools/style_run6.py
+tools/style_run7.py
+tools/style_run8.py
+tools/style_run9.py
+tools/wolf_one.py
+tools/batch_pose.py
+tools/batch_test.py
+tools/switch_ds_ref.py
+tools/verify_ds.py
+# 封面 / PPT / 图片裁剪等杂项
+tools/add_aesthetic_clause.py
+tools/add_common_constraints.py
+tools/build_ppt.py
+tools/compose_cover.py
+tools/compose_grok_cover.py
+tools/crop_ds_front.py
+tools/crop_grok_icon.py
+tools/extract_fish.py
+tools/fix_whale_ears.py
+tools/fix_whale_ears2.py
+tools/measure_cover.py
+tools/pack_pptx.py
+tools/gen_deck.py
+tools/gen_slides.py
+tools/ppt_figs.py
+tools/zoom_ds_head.py
+# tools/diag 里那个梗图脚本（属于别的任务）
+tools/diag/gen_wolf_whale_meme.py
+# 别的任务的文档
+封面制作规范.md
+联动场景提示词.md
 
 # ---------- 工具链 / 编辑器 ----------
 .dsh/
@@ -67,5 +117,7 @@ Thumbs.db
 *.swp
 
 # ---------- 刻意保留、不要忽略 ----------
-# 示例效果/     本工作台的实测样张，随代码一起发布
-# tools/diag/   诊断与验收脚本，是"结论可复现"的证据链
+# web/favicon.svg             页面图标（唯一入库的矢量资源）
+# tools/diag/                 诊断与验收脚本，是文档里"结论可复现"的证据链
+# tools/_paths.py             共享路径解析，所有工具脚本依赖它
+# tools/download.py 等        他人跑起来必需的下载/自检工具

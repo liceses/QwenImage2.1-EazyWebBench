@@ -180,8 +180,7 @@ def main():
     outs = entry.get("outputs", {})
     print("\n=== 输出文件 ===")
     outdir = os.path.join(os.path.dirname(os.path.dirname(here)), "..")
-    comfy_out = os.path.join(os.environ.get("QWEN21_COMFY_ROOT",
-                             r"D:\applications\comfy-ui\ComfyUI_windows_portable"),
+    comfy_out = os.path.join(_os.environ.get("QWEN21_COMFY_ROOT"),
                              "ComfyUI", "output")
     verdict = {}
     for node, o in outs.items():

@@ -12,6 +12,19 @@
 
 用法：python tools/selfcheck.py
 """
+
+# --- 可移植路径：环境变量优先，其次按本文件位置推导（详见 tools/_paths.py）---
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+
+def _comfy_dir(*_parts):
+    """ComfyUI 下的目录；找不到 ComfyUI 时退回项目内同名目录。"""
+    _r = _os.environ.get("QWEN21_COMFY_ROOT")
+    _b = _os.path.join(_r, "ComfyUI") if _r else _PROJECT_ROOT
+    return _os.path.join(_b, *_parts)
+
+# ---------------------------------------------------------------------------
 import json
 import os
 import sys
@@ -22,7 +35,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 MODELS = os.path.join(ROOT, "models")
-COMFY_MODELS = r"D:\applications\comfy-ui\ComfyUI_windows_portable\ComfyUI\models"
+COMFY_MODELS = _comfy_dir(r"models")
 
 EXPECT = {
     "diffusion_models/qwen_image_2.1_int8_convrot.safetensors": 7256783064,

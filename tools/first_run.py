@@ -6,6 +6,19 @@
 
 直接与 ComfyUI 的 HTTP API 交互（不经过工作台），用于独立验证。
 """
+
+# --- 可移植路径：环境变量优先，其次按本文件位置推导（详见 tools/_paths.py）---
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+
+def _comfy_dir(*_parts):
+    """ComfyUI 下的目录；找不到 ComfyUI 时退回项目内同名目录。"""
+    _r = _os.environ.get("QWEN21_COMFY_ROOT")
+    _b = _os.path.join(_r, "ComfyUI") if _r else _PROJECT_ROOT
+    return _os.path.join(_b, *_parts)
+
+# ---------------------------------------------------------------------------
 import json
 import os
 import sys
@@ -16,7 +29,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8188"
-COMFY_OUTPUT = r"D:\applications\comfy-ui\ComfyUI_windows_portable\ComfyUI\output"
+COMFY_OUTPUT = _comfy_dir(r"output")
 OUTDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test_output")
 os.makedirs(OUTDIR, exist_ok=True)
 

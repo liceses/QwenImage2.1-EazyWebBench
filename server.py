@@ -52,18 +52,26 @@ def log(msg):
 #          常见安装位置自动探测 → 项目内的 ComfyUI/ 目录。
 CONFIG_FILE = os.path.join(HERE, "config.json")
 
-# 常见 ComfyUI 安装位置（按便携版优先，因为便携版自带匹配的 PyTorch）
+# 常见 ComfyUI 安装位置。
+# 顺序刻意把"与本项目无关的常见位置"排前面、作者本机路径排最后 ——
+# 别人 clone 下来时，优先命中通用位置或项目内的 ComfyUI/，
+# 而不是先撞上某台机器特有的 D:\applications\... 路径。
 COMFY_CANDIDATES = [
-    r"D:\applications\comfy-ui\ComfyUI_windows_portable",
-    r"C:\ComfyUI_windows_portable",
-    r"D:\ComfyUI_windows_portable",
-    r"C:\ComfyUI",
-    r"D:\ComfyUI",
+    # 1) 项目内自带一份（最省事：解压到本项目目录即可）
     os.path.join(HERE, "ComfyUI"),
+    # 2) 用户主目录与桌面/文档下的常见解压位置
     os.path.expanduser(r"~\ComfyUI_windows_portable"),
     os.path.expanduser(r"~\Desktop\ComfyUI_windows_portable"),
     os.path.expanduser(r"~\Documents\ComfyUI_windows_portable"),
+    # 3) 盘符根目录（便携版常见解压位置）
+    r"C:\ComfyUI_windows_portable",
+    r"D:\ComfyUI_windows_portable",
+    r"E:\ComfyUI_windows_portable",
+    r"C:\ComfyUI",
+    r"D:\ComfyUI",
     r"C:\Program Files\ComfyUI",
+    # 4) 作者本机路径（保留作兜底，别人机器上不会命中）
+    r"D:\applications\comfy-ui\ComfyUI_windows_portable",
 ]
 
 
@@ -276,17 +284,66 @@ def ensure_comfy(timeout=240):
     return False
 
 
+def _make_extra_model_paths():
+    """在 ComfyUI 根目录写 extra_model_paths.yaml，让它直接读本项目的 models/。
+
+    这比"硬链接/复制"都优先：**零拷贝、零额外空间**，且跨盘也能用。
+    文件名带前缀，避免覆盖用户已有的 extra_model_paths.yaml。
+    """
+    if not COMFY_ROOT:
+        return False
+    yml = os.path.join(COMFY_ROOT, "extra_model_paths.yaml")
+    if os.path.exists(yml) and "qwen21_workbench" not in _read_text(yml):
+        log("检测到已有的 extra_model_paths.yaml（非本工作台生成），不覆盖；"
+            "改用挂接方式让 ComfyUI 看到权重")
+        return False
+    try:
+        body = (
+            "# 由 Qwen-Image-2.1 本地工作台自动生成，指向本项目的 models/ 目录。\n"
+            "# 作用：ComfyUI 直接读取项目里的权重，无需复制或硬链接（跨盘也可用）。\n"
+            "# 删掉本文件不影响 ComfyUI，只是它就看不懂项目里的权重了。\n"
+            "qwen21_workbench:\n"
+            f'    base_path: "{MODELS_DIR}"\n'
+            "    diffusion_models: diffusion_models\n"
+            "    text_encoders: text_encoders\n"
+            "    vae: vae\n"
+        )
+        with open(yml, "w", encoding="utf-8") as f:
+            f.write(body)
+        return True
+    except Exception as e:
+        log(f"写入 extra_model_paths.yaml 失败（将退回挂接方式）：{e}")
+        return False
+
+
+def _read_text(p):
+    try:
+        with open(p, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
 def ensure_model_links():
     """
-    把工作台 models/ 下的权重挂到 ComfyUI 的模型目录。
+    让 ComfyUI 能看到本项目 models/ 下的三件套权重。
 
-    优先用硬链接（同盘，零额外空间）；失败则退回复制。
-    这样权重只需在项目里保存一份，ComfyUI 也能直接看到。
+    三级策略，从"零代价"到"有代价"：
+      1) extra_model_paths.yaml —— 零拷贝、零额外空间（跨盘也行）★默认走这条
+      2) 硬链接               —— 同盘零额外空间
+      3) 复制                 —— 兜底，但要额外占一份 17 GB（会明确告诉用户）
     """
     if not COMFY_MODELS:
         log("未配置 ComfyUI 目录，跳过权重挂载"
             "（若 ComfyUI 已单独运行，请自行把权重放进它的 models/ 下）")
         return False
+
+    # 1) 首选：让 ComfyUI 直接读项目目录
+    if _make_extra_model_paths():
+        log(f"已让 ComfyUI 直接读取本项目权重（零拷贝）：{MODELS_DIR}")
+        return True
+
+    # 2/3) 退路：挂接进 ComfyUI 的 models/
     linked, copied, failed = [], [], []
     for key, (relpath, expect, label, _target_dir, _url) in REQUIRED_MODELS.items():
         src = os.path.join(MODELS_DIR, relpath)
@@ -308,15 +365,17 @@ def ensure_model_links():
         except Exception:
             try:
                 import shutil
-                shutil.copy2(src, dst)  # 跨盘时退化为复制
+                log(f"硬链接不可用（多为跨盘），改为复制：{os.path.basename(relpath)}"
+                    "  —— 这会额外占用一份磁盘空间，约 17 GB")
+                shutil.copy2(src, dst)
                 copied.append(os.path.basename(relpath))
             except Exception as e:
                 failed.append(f"{os.path.basename(relpath)}: {e}")
 
     if linked:
-        log(f"已硬链接到 ComfyUI（零额外空间）: {', '.join(linked)}")
+        log(f"已硬链接到 ComfyUI（零额外空间）：{', '.join(linked)}")
     if copied:
-        log(f"已复制到 ComfyUI: {', '.join(copied)}")
+        log(f"已复制到 ComfyUI：{', '.join(copied)}")
     for f in failed:
         log(f"警告：挂载失败 {f}")
     return not failed

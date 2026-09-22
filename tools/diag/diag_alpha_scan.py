@@ -81,7 +81,7 @@ def png_meta(path):
 
 
 def main():
-    dirs = sys.argv[1:] or ["outputs", "示例效果", "修复验证", "style_run9"]
+    dirs = sys.argv[1:] or ["outputs", "示例效果"]
     print(f"扫描根目录：{ROOT}\n")
     total = 0
     rgba = 0

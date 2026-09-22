@@ -11,6 +11,19 @@
 
 全部 20 步、固定种子 555。
 """
+
+# --- 可移植路径：环境变量优先，其次按本文件位置推导（详见 tools/_paths.py）---
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+
+def _comfy_dir(*_parts):
+    """ComfyUI 下的目录；找不到 ComfyUI 时退回项目内同名目录。"""
+    _r = _os.environ.get("QWEN21_COMFY_ROOT")
+    _b = _os.path.join(_r, "ComfyUI") if _r else _PROJECT_ROOT
+    return _os.path.join(_b, *_parts)
+
+# ---------------------------------------------------------------------------
 import json
 import os
 import sys
@@ -20,7 +33,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8188"
-COMFY_OUT = r"D:\applications\comfy-ui\ComfyUI_windows_portable\ComfyUI\output"
+COMFY_OUT = _comfy_dir(r"output")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "diag_out")
 os.makedirs(OUT, exist_ok=True)
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))

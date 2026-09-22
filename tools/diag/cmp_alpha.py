@@ -4,6 +4,19 @@
 
 用法：python tools/diag/cmp_alpha.py <图A> <图B> [每N列采样]
 """
+
+# --- 可移植路径：环境变量优先，其次按本文件位置推导（详见 tools/_paths.py）---
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+
+def _comfy_dir(*_parts):
+    """ComfyUI 下的目录；找不到 ComfyUI 时退回项目内同名目录。"""
+    _r = _os.environ.get("QWEN21_COMFY_ROOT")
+    _b = _os.path.join(_r, "ComfyUI") if _r else _PROJECT_ROOT
+    return _os.path.join(_b, *_parts)
+
+# ---------------------------------------------------------------------------
 import os
 import struct
 import sys
@@ -11,7 +24,7 @@ import zlib
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-OUT = r"D:\applications\comfy-ui\ComfyUI_windows_portable\ComfyUI\output"
+OUT = _comfy_dir(r"output")
 
 
 def load_alpha(path, rows=None, step=64):

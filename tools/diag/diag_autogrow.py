@@ -14,6 +14,19 @@ TextEncodeQwenImage21 的 latent 输出按第一张参考图的宽高比生成
   R2 扁平形式  "images.image_1": ["10", 0]             ← 展开后的真实输入名（怀疑正确）
   R3 扁平形式 + 两张图
 """
+
+# --- 可移植路径：环境变量优先，其次按本文件位置推导（详见 tools/_paths.py）---
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+
+def _comfy_dir(*_parts):
+    """ComfyUI 下的目录；找不到 ComfyUI 时退回项目内同名目录。"""
+    _r = _os.environ.get("QWEN21_COMFY_ROOT")
+    _b = _os.path.join(_r, "ComfyUI") if _r else _PROJECT_ROOT
+    return _os.path.join(_b, *_parts)
+
+# ---------------------------------------------------------------------------
 import json
 import os
 import sys
@@ -23,7 +36,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8188"
-COMFY_OUT = r"D:\applications\comfy-ui\ComfyUI_windows_portable\ComfyUI\output"
+COMFY_OUT = _comfy_dir(r"output")
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "diag_out10")
 os.makedirs(OUT, exist_ok=True)

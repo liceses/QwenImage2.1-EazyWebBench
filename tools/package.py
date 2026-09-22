@@ -14,8 +14,9 @@
 
 绝不打包：
     models/（权重，17GB+）、outputs/、uploads/（你的生成物与上传图）、
-    diag_out*/（调查中间产物）、.dsh/、__pycache__/、
-    以及工作目录里其它任务的文件（cover_*.png、ppt_zcode/、style_run*/ 等）
+    diag_out*/（调查中间产物）、.dsh/、__pycache__/，
+    以及工作目录里其它任务的文件（cover_*.png、ppt_zcode/、style_run*/ 等 ——
+    这些在开发机上可能还存在，但它们不在本仓库内，打包时应跳过）
 """
 import argparse
 import os
