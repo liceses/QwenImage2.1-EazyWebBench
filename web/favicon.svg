@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Qwen-Image-2.1 本地工作台">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f6df0"/>
+      <stop offset="1" stop-color="#0b57d0"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角方块底（与顶栏 brand-logo 同形同色） -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
+  <!-- 字母 Q：外圈 + 右下角小尾巴 -->
+  <circle cx="31" cy="30" r="15.5" fill="none" stroke="#fff" stroke-width="7"/>
+  <path d="M40 39 L51 51" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+</svg>

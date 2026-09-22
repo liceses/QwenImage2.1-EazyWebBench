@@ -1,0 +1,71 @@
+# ============================================================
+#  .gitignore —— Qwen-Image-2.1 本地工作台
+#
+#  原则：只版本化代码与文档。
+#  权重、出图结果、运行日志、打包产物都不入库：
+#    · 权重 17 GB，官网可下载（tools/download.py 一键拉取）
+#    · 出图结果与实验产物是"使用结果"，不是"项目源码"
+#    · config.json 含本机 ComfyUI 路径，各人不同
+#
+#  ⚠ 注意：.gitignore **不支持行尾注释**，
+#    写成 "outputs/   # 出图结果" 会让整行变成一个无效模式（# 之后算模式的一部分）。
+#    所以下面所有说明都单独成行。
+# ============================================================
+
+# ---------- 模型权重（17 GB，用 tools/download.py 获取）----------
+models/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+
+# ---------- 运行期产物 ----------
+# 出图结果（按 job_id 分目录）
+outputs/
+# 上传的参考图
+uploads/
+# 分享包 zip
+dist/
+# 断点续传的临时分片
+*.part
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# ---------- 本机配置（含本机 ComfyUI 路径）----------
+config.json
+
+# ---------- 批量实验产物（不属于工作台本体，体积大）----------
+diag_out/
+diag_out8/
+diag_out9/
+diag_out10/
+修复验证/
+style_run/
+style_run3/
+style_run4/
+style_run5/
+style_run6/
+style_run7/
+style_run8/
+style_run9/
+wolf_run/
+pose_out/
+fish_ref/
+grok_logo/
+zcode_logo/
+ppt_zcode/
+
+# ---------- 工具链 / 编辑器 ----------
+.dsh/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---------- 刻意保留、不要忽略 ----------
+# 示例效果/     本工作台的实测样张，随代码一起发布
+# tools/diag/   诊断与验收脚本，是"结论可复现"的证据链

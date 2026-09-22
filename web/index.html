@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Qwen-Image-2.1 本地工作台</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/app.css">
+<script>
+/* 尽早定主题，避免深色模式下的白闪 */
+(function(){
+  try{
+    var m = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+    document.documentElement.setAttribute("data-theme", (m && m.matches) ? "dark" : "light");
+    if (m && m.addEventListener) {
+      m.addEventListener("change", function(e){
+        document.documentElement.setAttribute("data-theme", e.matches ? "dark" : "light");
+      });
+    }
+  }catch(e){ document.documentElement.setAttribute("data-theme","light"); }
+})();
+</script>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="appbar">
+    <div class="appbar-in">
+      <div class="brand">
+        <div class="brand-logo">Q</div>
+        <div>
+          <h1>Qwen-Image-2.1 本地工作台</h1>
+          <div class="sub">本机推理 · 不调用任何在线 API</div>
+        </div>
+      </div>
+      <div class="appbar-right">
+        <span class="badge" id="badgeModel">权重检查中…</span>
+        <span class="badge" id="badgeBackend">后端检查中…</span>
+        <span class="badge" id="badgeGpu"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ================= 左栏：输入与参数（独立滚动） ================= -->
+    <div class="pane" id="sidebar">
+
+      <div id="globalMsg" class="msg hide" role="status" aria-live="polite"></div>
+
+      <section class="card">
+        <h2>提示词 <span class="hint">中文 / 英文均可</span></h2>
+
+        <div class="field textarea">
+          <label for="prompt">正向提示词 <span class="req">*</span></label>
+          <textarea id="prompt" placeholder="例：雨夜霓虹招牌，写着「开摆」二字，湿滑路面倒影，电影感打光"></textarea>
+        </div>
+
+        <details>
+          <summary>负向提示词</summary>
+          <div class="field textarea">
+            <label for="negative">描述「不要出现什么」</label>
+            <textarea id="negative" class="sm" placeholder="例：模糊, 低质量, 错别字, 乱码, 水印, 肢体变形"></textarea>
+          </div>
+          <div class="note" id="negNote">官方默认不开引导（引导强度 = 1.0）：此时负向提示词<b>不生效</b>。要让它生效，需把引导强度调到 &gt; 1（计算量翻倍）。</div>
+        </details>
+
+        <details>
+          <summary>参考图 <span class="hint">可选 · 填入后进入图像编辑模式</span></summary>
+          <div class="drop" id="drop">
+            点击选择图片，或把图片拖到这里<br>
+            <span class="drop-hint">支持 PNG / JPG / WEBP，可多选，最多 10 张</span>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+          <div class="refs" id="refs"></div>
+          <div class="note" id="refNote" style="display:none">
+            <b>图像编辑模式已启用</b>。画布尺寸<b>跟随第一张参考图</b>（<code>&lt;image1&gt;</code>），
+            所以「尺寸 / 比例」在此模式下<b>不生效</b>；步数、引导强度、采样器、随机种子仍然生效。
+          </div>
+          <div id="refBudgetWrap" style="display:none">
+            <div class="field">
+              <label for="refRes">参考图像素预算</label>
+              <select id="refRes">
+                <option value="0">跟随参考图原始尺寸（官方默认，保真优先）</option>
+                <option value="1024">1024 预算（省显存）</option>
+                <option value="2048">2048 预算</option>
+              </select>
+            </div>
+            <div class="note">参考图越大越保真，但显存占用和耗时也越高。12 GB 显存建议保持「跟随原图」；
+              若参考图超过 2000px 长边而爆显存，改选 1024 预算。</div>
+          </div>
+          <div class="msg warn" id="refWarn" style="display:none;margin-top:12px"></div>
+        </details>
+      </section>
+
+      <section class="card collapsible">
+        <details>
+          <summary>
+            <span class="card-title">局部编辑</span>
+            <span class="hint">默认折叠 · 展开后在图上画出要改的区域</span>
+          </summary>
+          <div class="note" style="margin-top:10px">
+            把要修改的地方<b>画出来</b>（圈一圈或涂一涂），写下要改成什么。<br>
+            工作台会：<b>①</b> 把标注画在图上交给模型 → <b>②</b> 按你画的区域把结果<b>合成</b>回原图 ——
+            所以<b>没画到的地方逐点不变</b>，是真局部修改，不是整图重绘。
+          </div>
+
+          <div class="field">
+            <label for="markSource">要标注的图</label>
+            <select id="markSource"></select>
+          </div>
+
+          <div class="mark-wrap" id="markWrap">
+            <canvas id="markCanvas" width="10" height="10"></canvas>
+            <div class="mark-empty" id="markEmpty">先选择一张图（参考图 / 本次结果 / 历史图）</div>
+          </div>
+
+          <div class="mark-tools toolbar">
+            <span class="brush-ctl">画笔
+              <input type="range" id="markBrush" min="8" max="120" value="40" aria-label="画笔大小">
+            </span>
+            <button class="outlined small" id="btnMarkUndo">撤销一笔</button>
+            <button class="outlined small" id="btnMarkClear">清空标注</button>
+            <button class="outlined small" id="btnMarkAll">全选画面</button>
+          </div>
+
+          <div class="field">
+            <label for="markPrompt">要改成什么 <span class="req">*</span></label>
+            <textarea id="markPrompt" class="sm"
+              placeholder="例：把标注区域里的眼睛改成金色 / 把标注区域的衣服换成红色"></textarea>
+          </div>
+          <div class="note">建议在描述里点明是<b>标注区域 / 圈里 / 涂的那块</b>，模型对"标记"的响应最稳。</div>
+
+          <div class="mark-tools actions">
+            <button class="filled block" id="btnMarkRun">按标注局部修改</button>
+          </div>
+          <div class="step" id="markStatus"></div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>生成参数</h2>
+
+        <div class="field">
+          <label for="preset">尺寸 / 比例</label>
+          <select id="preset"></select>
+        </div>
+        <div class="note" id="sizeLockTip" style="display:none;color:var(--md-on-warn-container)">
+          <b style="color:inherit">已进入图像编辑模式</b> —— 默认<b style="color:inherit">画布由参考图
+          <code>&lt;image1&gt;</code> 决定</b>，宽高控件已停用。
+          要出「合影 / 海报」这类新构图，请打开下面的<b style="color:inherit">自定义画布</b>
+          （官方指南：合影用 3:2 横版）。
+        </div>
+
+        <label class="switch" id="customCanvasLabel" style="display:none">
+          <input type="checkbox" id="customCanvas">
+          <span class="track"></span>
+          <span class="switch-label">自定义画布</span>
+          <span class="hint">合影 / 海报等新构图用，不跟随参考图比例</span>
+        </label>
+
+        <label class="switch">
+          <input type="checkbox" id="transparentBg">
+          <span class="track"></span>
+          <span class="switch-label">透明背景（RGBA 出图）</span>
+          <span class="hint">按官方模板自动补全提示词，出图后显示实测透明像素比例</span>
+        </label>
+
+        <div class="row" style="margin-top:2px">
+          <div class="field">
+            <label for="width">宽度 (px)</label>
+            <input type="number" id="width" value="1024" min="64" max="4096" step="32">
+          </div>
+          <div class="field">
+            <label for="height">高度 (px)</label>
+            <input type="number" id="height" value="1024" min="64" max="4096" step="32">
+          </div>
+        </div>
+
+        <details>
+          <summary>更多参数 <span class="hint">步数 · 引导强度 · 随机种子 · 采样器</span></summary>
+          <div class="field">
+            <label for="steps">采样步数</label>
+            <input type="number" id="steps" value="25" min="1" max="200" step="1">
+            <div class="note" style="margin-top:6px">官方工作流默认 25。最直接的调速旋钮，每步约 1.4 秒。</div>
+          </div>
+          <div class="field">
+            <label for="cfg">引导强度 true_cfg_scale</label>
+            <input type="number" id="cfg" value="1.0" min="0" max="20" step="0.1">
+            <div class="note" style="margin-top:6px">官方推荐 1.0（即不开引导）；调到 &gt; 1 才启用 CFG、负向提示词才生效，代价是每步计算量翻倍。</div>
+          </div>
+          <div class="field">
+            <label for="seed">随机种子</label>
+            <input type="text" id="seed" placeholder="留空表示随机">
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="sampler">采样器</label>
+              <select id="sampler"></select>
+            </div>
+            <div class="field">
+              <label for="scheduler">调度器</label>
+              <select id="scheduler"></select>
+            </div>
+          </div>
+          <div class="note">默认 <b>euler + simple</b>，与官方 Qwen-Image-2.1 工作流一致，一般无需修改。</div>
+        </details>
+
+        <details>
+          <summary>透明背景说明</summary>
+          <div class="note" id="alphaNote" style="margin-top:4px">
+            勾选后会按<b>官方透明图模板</b>自动补全提示词（你已写「透明背景 / transparent」等字样时不会重复追加）。<br>
+            <b>文生图</b>：生成的 alpha 由模型直接给。本机实测 1024² 透明图，透明像素约 <b>72%</b>，耗时与普通出图相当。<br>
+            <b>参考图编辑</b>：若参考图自带 alpha（透明 PNG），输出的 alpha 会沿用它，实现「进 RGBA、出 RGBA」。<br>
+            出图后处理结果区会变成<b>棋盘格</b>，并显示实测透明像素比例 —— 若显示 0%，说明这次没生成透明区域，换个种子再试。
+          </div>
+        </details>
+      </section>
+
+      <section class="card generate-bar">
+        <button class="filled block" id="btnGen">开始生成</button>
+        <div class="progress-wrap" id="progWrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="bar"><i id="progBar"></i></div>
+          <div class="progress-text">
+            <span id="progLabel"><span class="spinner"></span>正在推理…</span>
+            <span id="progPct">0%</span>
+          </div>
+        </div>
+        <div class="note" id="firstRunNote">
+          首次出图需要加载约 16 GB 权重，会明显慢一些；之后会快很多。
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= 右栏：结果与历史（独立滚动） ================= -->
+    <div class="pane" id="mainCol">
+      <section class="card">
+        <h2>生成结果</h2>
+        <div class="result-stage" id="stage">
+          <div class="placeholder">
+            <span class="big">还没有图片</span>
+            在左侧输入提示词，然后点击「开始生成」
+          </div>
+        </div>
+        <div class="meta" id="meta" style="display:none"></div>
+      </section>
+
+      <section class="card">
+        <h2>历史记录 <span class="hint">本次会话，刷新页面即清空</span></h2>
+        <div class="history" id="history"></div>
+        <div class="history-empty" id="historyEmpty">本次会话还没有生成记录。</div>
+      </section>
+
+      <section class="card">
+        <h2>模型能力速览 <span class="hint">✅ = 本工作台已接通并实测</span></h2>
+        <div class="kv">
+          <b>任务</b>：文生图 ✅ · 图像编辑（单图）✅ · 多参考图合成（最多 10 张）✅ ·
+          <b>透明背景 RGBA 出图</b> ✅（打开上面的开关）· 透明背景编辑 ✅（参考图带 alpha 时） ·
+          <b>局部编辑</b> ✅（在图上画标记，标注区外逐点不变）<br>
+          <b>输入</b>：中英文提示词；参考图 PNG/JPG/WEBP（<b>参考图的 alpha 通道只在打开透明开关时才会被沿用</b>）<br>
+          <b>输出</b>：PNG（<b>原生 RGBA</b>，VAE 解码就是 4 通道）<br>
+          <b>官方参数</b>：步数 40（本工作流默认 25）、引导强度 1.0（不开引导）、随机种子、负向提示词（仅在引导强度 &gt; 1 时生效）<br>
+          <b>许可</b>：Qwen Research License，<b>仅限非商用</b>
+        </div>
+        <details>
+          <summary>关于「局部编辑」和官方宣称的差别</summary>
+          <div class="note">
+            · 官方说的 circles / painted annotations <b>不是 API 参数</b>，而是<b>画在条件图上的标记</b> ——
+            diffusers 的 <code>QwenImage21Pipeline</code> 与 ComfyUI 的 <code>TextEncodeQwenImage21</code>
+            都<b>没有 mask 入参</b>，所以「独立掩码」这条路在本机接不上。<br>
+            · 实测潜空间掩码（<code>SetLatentNoiseMask</code>）<b>对 2.1 无效</b>：掩码外的像素照样 100% 被改动。<br>
+            · 因此本工作台的做法是：<b>标记引导模型重绘 + 按标记做确定性合成</b> ——
+            这样才能给出「标注区外逐点不变」的保证。<br>
+            · 标记区内的质量仍取决于模型：纯色 / 换色很稳，要求「画出特定图形」可能需要换种子重试。
+          </div>
+        </details>
+        <details>
+          <summary>本工作台其它已知边界</summary>
+          <div class="note">
+            · 经典「图生图按去噪强度重绘」不是官方接口（官方只提供参考图编辑语义）<br>
+            · 不支持 ControlNet（官方无 2.1 权重；社区 ControlNet 都属 2512/2509 老架构，不兼容）<br>
+            · 目前没有加速 LoRA（Lightning 等），无法像 2512 那样 4 步出图
+          </div>
+        </details>
+      </section>
+    </div>
+
+  </div>
+</div>
+
+<!-- 图片查看器：点结果图 / 历史缩略图的放大按钮打开 -->
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="图片查看器">
+  <div class="viewer-top">
+    <div class="viewer-meta" id="viewerMeta"></div>
+    <div class="viewer-tools">
+      <button class="viewer-btn" id="vZoomOut" title="缩小（滚轮也可）" aria-label="缩小">−</button>
+      <span class="viewer-pct" id="vPct">100%</span>
+      <button class="viewer-btn" id="vZoomIn" title="放大（滚轮也可）" aria-label="放大">＋</button>
+      <button class="viewer-btn" id="vFit" title="适应窗口（按 0）" aria-label="适应窗口">适应</button>
+      <button class="viewer-btn" id="vOne" title="原始大小 1:1（按 1）" aria-label="原始大小">1:1</button>
+      <a id="vDownload" download><button class="viewer-btn" title="下载这张图片">下载</button></a>
+      <button class="viewer-btn" id="vClose" title="关闭（Esc）" aria-label="关闭">✕</button>
+    </div>
+  </div>
+  <div class="viewer-stage" id="vStage">
+    <img id="vImg" alt="查看中的图片">
+  </div>
+  <div class="viewer-hint">滚轮缩放 · 按住拖动平移 · 双击在 1:1 与适应窗口之间切换 · Esc 关闭</div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

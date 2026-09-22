@@ -1,0 +1,5 @@
+{
+  "_说明": "把 comfy_root 改成你自己的 ComfyUI 根目录（含 ComfyUI/main.py 的那一层），然后另存为 config.json。若 ComfyUI 已单独运行，本文件可以不建。",
+  "_优先级": "环境变量 QWEN21_COMFY_ROOT 优先于本文件；两者都没配时会自动探测常见位置。",
+  "comfy_root": "D:\\ComfyUI_windows_portable"
+}
