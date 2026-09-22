@@ -131,6 +131,8 @@ python tools\selfcheck.py
 ```
 
 - **`<image1>` 是编辑目标**，决定画布尺寸与基准风格 —— 把「要保持构图的那张」放第一位
+- **顺序可以拖拽调整**：上传后按住缩略图拖动即可重排。顺序即编号，
+  拖拽后「图1/图2/图3」会实时重编号，**提交给后端的次序同步跟着变**
 - 编辑模式下「尺寸 / 比例」不生效（画布跟随 `<image1>`）
 - 单图可用自然指代，**多图必须用 `<imageN>` 标记**（官方称该格式 mandatory）
 
@@ -233,7 +235,7 @@ QwenImage2.1-EazyWebBench/
 ├─ requirements.txt          依赖说明（其实什么都不用装）
 ├─ config.example.json       ComfyUI 路径配置模板
 ├─ web/                      界面（手写 Material Design 3，无 CDN / 无在线字体）
-│  ├─ index.html  app.css  app.js  favicon.svg
+│  ├─ index.html  app.css  app.js  favicon.svg  dragula.min.js
 ├─ tools/
 │  ├─ download.py            权重下载器（多镜像 + 断点续传 + 完整性校验）
 │  ├─ selfcheck.py           环境自检：一条命令核验权重/服务/节点
@@ -274,5 +276,9 @@ QwenImage2.1-EazyWebBench/
 - 权重（int8 量化版）：[Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1)
 - 推理后端：[ComfyUI](https://github.com/comfyanonymous/ComfyUI)（需要 master 分支）
 - 官方工作流参考：[Comfy-Org/workflow_templates](https://github.com/Comfy-Org/workflow_templates)
+- 参考图拖拽排序：[**Dragula**](https://github.com/bevacqua/dragula) v3.7.3（MIT 许可）。
+  为保持"离线可用"，库文件**随仓库提供**（`web/dragula.min.js`，13953 字节，
+  SHA256 `7a08f9c71b63e340ecd0651b39b559ee6d8b10eb27beef62e4e82d99dd48fa39`），
+  不引用任何 CDN。界面与后端其余部分仍是零第三方依赖。
 
 本仓库是围绕上述开源项目做的**本地工作台封装**（后端 + 界面 + 工具链），不含模型本身。

@@ -255,6 +255,28 @@ button.block{width:100%}
   background:color-mix(in srgb,var(--md-scrim) 64%,transparent);color:#fff}
 .ref button:hover:not(:disabled){background:var(--md-error);color:var(--md-on-error)}
 
+/* ---------- 参考图拖拽排序（Dragula）----------
+   Dragula 只负责搬 DOM，**视觉态必须自己写** ——
+   不写 .gu-mirror 的话拖起来的是一个没定位的裸元素，看着就是"坏的"。 */
+.ref{cursor:grab;touch-action:none}
+.ref:active{cursor:grabbing}
+.ref-drag-hint{font-size:11.5px;line-height:1.7;color:var(--md-on-surface-variant);
+  margin-top:10px}
+.ref-drag-hint code{background:var(--md-surface-container-high);padding:1px 5px;border-radius:var(--r-xs)}
+/* 跟随光标的镜像：脱离文档流，稍微放大并抬升，表示"正在搬运" */
+.gu-mirror{position:fixed;margin:0;z-index:1000;pointer-events:none;opacity:.92;
+  cursor:grabbing;border-radius:var(--r-md);overflow:hidden;
+  box-shadow:var(--e3);transform:rotate(-2deg) scale(1.06)}
+.gu-mirror .ref{cursor:grabbing}
+/* 原位留下的占位：淡出并虚线化，让人看出"它会挪到这里" */
+.gu-transit{opacity:.32;filter:grayscale(.5)}
+.gu-transit .ref,.gu-transit.ref{box-shadow:none;
+  outline:2px dashed var(--md-primary);outline-offset:-2px}
+/* 拖拽期间禁止选中文字/图片 */
+.gu-unselectable{user-select:none!important}
+.gu-unselectable *{user-select:none!important}
+.gu-hide{display:none!important}
+
 /* ---------- 提示条（Material banner / snackbar 风格） ---------- */
 .msg{border-radius:var(--r-sm);padding:12px 16px;font-size:13px;line-height:1.6;
   margin-bottom:16px;white-space:pre-wrap;

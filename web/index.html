@@ -75,6 +75,10 @@
           </div>
           <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
           <div class="refs" id="refs"></div>
+          <div class="ref-drag-hint" id="refDragHint" style="display:none">
+            按住缩略图可<b>拖动调整顺序</b> —— 顺序即是 <code>&lt;image1&gt;</code> <code>&lt;image2&gt;</code> … 的编号，
+            <b>第 1 张是编辑目标</b>（决定画布尺寸与基准风格），把「要保持构图的那张」放最前面。
+          </div>
           <div class="note" id="refNote" style="display:none">
             <b>图像编辑模式已启用</b>。画布尺寸<b>跟随第一张参考图</b>（<code>&lt;image1&gt;</code>），
             所以「尺寸 / 比例」在此模式下<b>不生效</b>；步数、引导强度、采样器、随机种子仍然生效。
@@ -310,6 +314,7 @@
   <div class="viewer-hint">滚轮缩放 · 按住拖动平移 · 双击在 1:1 与适应窗口之间切换 · Esc 关闭</div>
 </div>
 
+<script src="/static/dragula.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -138,6 +138,7 @@ async function init() {
 
   initMarkUI();
   initLightbox();
+  initRefsDragula();
 
   await refreshStatus();
   await loadJobs();
@@ -238,9 +239,11 @@ function renderRefs() {
   state.refs.forEach((r, i) => {
     const d = document.createElement("div");
     d.className = "ref";
-    d.innerHTML = '<img src="' + r.url + '" alt="参考图' + (i + 1) + '">' +
+    // 拖拽后要靠它把 DOM 顺序映射回 state.refs（元素会被重建，不能挂在对象上）
+    d.setAttribute("data-ref-name", r.name);
+    d.innerHTML = '<img src="' + r.url + '" alt="参考图' + (i + 1) + '" draggable="false">' +
       '<span class="num">图' + (i + 1) + '</span>' +
-      '<button title="移除">×</button>';
+      '<button class="ref-del" title="移除">×</button>';
     d.querySelector("button").addEventListener("click", () => {
       state.refs.splice(i, 1);
       renderRefs();
@@ -249,9 +252,58 @@ function renderRefs() {
   });
   $("refNote").style.display = state.refs.length ? "block" : "none";
   $("refBudgetWrap").style.display = state.refs.length ? "block" : "none";
+  const dragHint = $("refDragHint");
+  if (dragHint) dragHint.style.display = state.refs.length > 1 ? "block" : "none";
   updateSizeControls();
   renderRefWarn();
   renderMarkSources();
+}
+
+/* ----------------------------------------------------------- 参考图拖拽排序（Dragula） */
+/*
+ * 顺序是有语义的：<image1> 是编辑目标、决定画布尺寸与基准风格。
+ * Dragula 只搬 DOM —— 如果不同步回 state.refs，界面顺序变了但
+ * 提交给后端的 reference_images 仍是旧顺序（= 只是"看起来"换了位置）。
+ * 所以 drop 之后按 DOM 顺序重建 state.refs，再重渲染以刷新「图1/图2」编号。
+ */
+let refsDragula = null;
+
+function syncRefsOrderFromDom() {
+  const box = $("refs");
+  if (!box) return;
+  const byName = new Map(state.refs.map((r) => [r.name, r]));
+  const next = [];
+  Array.from(box.querySelectorAll(".ref")).forEach((el) => {
+    const n = el.getAttribute("data-ref-name");
+    if (n && byName.has(n) && !next.includes(byName.get(n))) next.push(byName.get(n));
+  });
+  // 保险：万一有元素没匹配上，补到尾部 —— 绝不因为拖拽把参考图弄丢
+  state.refs.forEach((r) => { if (!next.includes(r)) next.push(r); });
+
+  const before = state.refs.map((r) => r.name).join("\u0000");
+  const after = next.map((r) => r.name).join("\u0000");
+  state.refs = next;
+  if (before === after) return;
+  // 等 Dragula 处理完本次事件再重渲染，避免它还在引用被移除的节点
+  setTimeout(() => { renderRefs(); }, 0);
+}
+
+function initRefsDragula() {
+  const box = $("refs");
+  if (!box) return;
+  if (typeof dragula !== "function") {
+    // 库没加载成功时不静默：顺序仍以上传顺序为准，但要让用户知道拖拽不可用
+    console.warn("Dragula 未加载，参考图拖拽排序不可用（顺序按上传先后）");
+    return;
+  }
+  refsDragula = dragula([box], {
+    // 点删除按钮时不要触发拖拽
+    moves: (el, source, handle) => !(handle && handle.classList && handle.classList.contains("ref-del")),
+    revertOnSpill: true,     // 拖到容器外松手 → 回原位，不会丢
+    direction: "horizontal",
+  });
+  refsDragula.on("drop", syncRefsOrderFromDom);
+  refsDragula.on("cancel", syncRefsOrderFromDom);
 }
 
 /* 编辑模式下画布默认由 <image1> 决定，尺寸控件停用；
