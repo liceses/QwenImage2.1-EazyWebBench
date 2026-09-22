@@ -1452,7 +1452,14 @@ class Handler(BaseHTTPRequestHandler):
         ok, models = check_models()
         if not ok:
             missing = [v["message"] for v in models.values() if v["status"] != "ok"]
-            return self._error(503, "模型权重未就绪，无法出图：\n" + "\n".join(missing),
+            hint = (
+                "\n\n补齐方式（在本项目目录执行，支持断点续传 + 自动多镜像，约 17.3 GB）：\n"
+                "    python tools\\download.py\n"
+                f"权重目录：{MODELS_DIR}\n"
+                "下载完成后无需重启工作台，直接再次点击「开始生成」即可。\n"
+                "详见 README.md 的「快速开始」第 3 步。"
+            )
+            return self._error(503, "模型权重未就绪，无法出图：\n" + "\n".join(missing) + hint,
                                models=models, models_dir=MODELS_DIR)
 
         with STATE_LOCK:
