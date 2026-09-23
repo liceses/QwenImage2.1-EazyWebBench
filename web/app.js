@@ -139,6 +139,7 @@ async function init() {
   initMarkUI();
   initLightbox();
   initRefsDragula();
+  initPasteImage();
 
   await refreshStatus();
   await loadJobs();
@@ -214,23 +215,99 @@ async function refreshStatus() {
 
 /* ----------------------------------------------------------- 参考图 */
 
+/* 三条入队路径（手动上传 / 产物一键加入 / 剪贴板粘贴）共用这一套，
+   保证 state.refs 的结构、上限判断、渲染刷新只有一处实现。 */
+function refLimit() {
+  return (state.cfg && state.cfg.max_reference_images) || 10;
+}
+
+function refHasRoom() {
+  if (state.refs.length >= refLimit()) {
+    showMsg("参考图最多 " + refLimit() + " 张，未能加入更多（可先移除几张再试）。", "warn");
+    return false;
+  }
+  return true;
+}
+
+/* 追加到队列末尾 —— 不清空、不覆盖已有参考图。
+   刻意不去重：与现有手动上传行为一致（同一张图传两次本来就会有两份）。 */
+function appendRef(entry) {
+  state.refs.push(entry);
+}
+
+async function addRefFromOutput(file) {
+  if (!refHasRoom()) return false;
+  try {
+    const r = await api("/api/ref-from-output", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: file }),
+    });
+    appendRef({ name: r.name, url: r.url, width: r.width, height: r.height });
+    renderRefs();
+    toast("已加入参考图队列（第 " + state.refs.length + " 张）", "ok");
+    return true;
+  } catch (e) {
+    showMsg("加入参考图失败：" + e.message);
+    return false;
+  }
+}
+
 async function uploadFiles(files) {
-  const max = (state.cfg && state.cfg.max_reference_images) || 10;
+  let added = 0;
   for (const f of files) {
-    if (state.refs.length >= max) {
-      showMsg("参考图最多 " + max + " 张，多余的已忽略。", "warn");
-      break;
-    }
+    if (!refHasRoom()) break;
     const fd = new FormData();
-    fd.append("file", f, f.name);
+    fd.append("file", f, f.name || "clipboard.png");
     try {
       const r = await api("/api/upload", { method: "POST", body: fd });
-      state.refs.push({ name: r.name, url: r.url });
+      appendRef({ name: r.name, url: r.url, width: r.width, height: r.height });
+      added++;
     } catch (e) {
       showMsg("参考图上传失败：" + e.message);
     }
   }
   renderRefs();
+  return added;
+}
+
+/* Ctrl+V 把剪贴板里的图片加入参考图队列。
+   只在剪贴板**确实含图片**时才接管：粘贴文字（例如往提示词框里贴文本）
+   完全不受影响，因此不需要"仅当参考图区域聚焦时才响应"这类限制。 */
+function initPasteImage() {
+  document.addEventListener("paste", (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const files = [];
+    for (const it of (cd.items || [])) {
+      if (it.kind !== "file" || !it.type || it.type.indexOf("image/") !== 0) continue;
+      const blob = it.getAsFile();
+      if (!blob) continue;
+      const ext = (it.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      files.push(new File([blob], "clipboard_" + (files.length + 1) + "." + ext, { type: it.type }));
+    }
+    if (!files.length) return;   // 没有图片 → 不拦截，交给浏览器默认行为
+    e.preventDefault();
+    uploadFiles(files).then((n) => {
+      if (n > 0) toast("已从剪贴板加入 " + n + " 张参考图", "ok");
+      else toast("剪贴板图片未能加入（可能已达张数上限）", "warn");
+    });
+  });
+}
+
+function toast(text, kind) {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    document.body.appendChild(el);
+  }
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = text;
+  void el.offsetWidth;               // 重排一次，保证连续调用也能重播过渡
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2400);
 }
 
 function renderRefs() {
@@ -692,12 +769,16 @@ function openLightbox(url, name, meta) {
   if (!v || !img) return;
   viewer.url = url;
   viewer.scale = 1; viewer.tx = 0; viewer.ty = 0;
-  $("viewerMeta").textContent = meta || name || "";
+  viewer.meta = meta || "";
+  // 尺寸与名称都在图片加载后用真实像素补齐，避免先闪一个记录值
+  $("viewerMeta").textContent = name || "";
   $("vDownload").setAttribute("href", url);
   $("vDownload").setAttribute("download", name || "qwen21.png");
   img.onload = () => {
     viewer.natW = img.naturalWidth;
     viewer.natH = img.naturalHeight;
+    $("viewerMeta").textContent =
+      viewer.natW + " × " + viewer.natH + (viewer.meta ? "  ·  " + viewer.meta : "");
     fitLightbox();
   };
   img.src = url;
@@ -978,23 +1059,27 @@ function renderResult(job) {
 
   const p = job.params || {};
   const dlName = (p.seed != null ? "qwen21_seed" + p.seed : "qwen21") + ".png";
-  const viewMeta = (p.width || "?") + " × " + (p.height || "?")
-    + (p.seed != null ? "  ·  seed " + p.seed : "")
+  // 尺寸的唯一来源是图片本身，所以查看器的标题里**不带尺寸**，
+  // 由 openLightbox 在图片 onload 后用 naturalWidth/naturalHeight 现算。
+  const viewMeta = (p.seed != null ? "seed " + p.seed : "")
     + (p.mode === "edit" ? "  ·  图像编辑" : "  ·  文生图")
     + (hasAlpha ? "  ·  透明 " + (alpha.transparent_ratio * 100).toFixed(1) + "%" : "");
   // 点大图 → 打开查看器（放大 / 平移 / 下载）
   stage.title = "点击放大查看";
   stage.addEventListener("click", () => openLightbox(url, dlName, viewMeta));
+  // 记录值仅作"加载完成前的占位"，随后会被真实像素尺寸覆盖（见下方 onload）
+  const recSize = (img.width && img.height) ? img.width + " × " + img.height : "—";
   const rows = [
     ["提示词", p.prompt],
     ["负向提示词", (p.negative_prompt && p.negative_prompt.trim()) || "（空）"],
-    ["模式", p.mode === "edit" ? "图像编辑（含参考图）" : "文生图"],
+    ["模式", p.mode === "edit" ? "图像编辑（含参考图）"
+      : (p.mode === "local" ? "局部编辑（合成）" : "文生图")],
     ["透明背景", p.transparent_bg
       ? (hasAlpha
           ? "已开启 · 实测透明像素 " + (alpha.transparent_ratio * 100).toFixed(1) + "%"
           : "已开启 · 未检出透明像素（换个种子再试）")
       : "未开启"],
-    ["尺寸", p.width + " × " + p.height],
+    ["尺寸", recSize, "metaSize"],
     ["采样步数", p.steps],
     ["引导强度", p.cfg + (p.cfg > 1 ? "（负向提示词生效）" : "（不开引导）")],
     ["随机种子", p.seed + (p.seed_was_random ? "（随机）" : "（固定）")],
@@ -1009,13 +1094,15 @@ function renderResult(job) {
   ];
 
   let html = '<table>';
-  rows.forEach(([k, v]) => {
-    html += '<tr><td>' + escapeHtml(k) + '</td><td class="pval">' + escapeHtml(v) + '</td></tr>';
+  rows.forEach(([k, v, id]) => {
+    html += '<tr><td>' + escapeHtml(k) + '</td><td class="pval"'
+      + (id ? ' id="' + id + '"' : '') + '>' + escapeHtml(v) + '</td></tr>';
   });
   html += '</table>';
 
   html += '<div class="actions">' +
     '<button class="small" id="btnView">放大查看</button>' +
+    '<button class="small" id="btnAsRef">作为参考图</button>' +
     '<a href="' + url + '" download="' + escapeHtml(dlName) + '"><button class="small">' +
     (hasAlpha ? "下载透明 PNG（RGBA）" : "下载这张图片") + '</button></a>' +
     '<button class="small" id="btnReuse">用这组参数再生成</button>' +
@@ -1029,8 +1116,25 @@ function renderResult(job) {
   meta.innerHTML = html;
   meta.style.display = "block";
 
+  // ---- 尺寸收敛到"实际图片"：主图加载完就用真实像素覆盖掉占位值 ----
+  // naturalWidth 是图片资源的固有尺寸，与 CSS 缩放/显示尺寸无关。
+  const mainEl = $("mainImg");
+  const fixSize = () => {
+    if (!mainEl) return;
+    const w = mainEl.naturalWidth, h = mainEl.naturalHeight;
+    if (!w || !h) return;
+    const cell = $("metaSize");
+    if (cell) cell.textContent = w + " × " + h;
+  };
+  if (mainEl) {
+    if (mainEl.complete) fixSize();
+    else mainEl.addEventListener("load", fixSize);
+  }
+
   const btnView = $("btnView");
   if (btnView) btnView.addEventListener("click", () => openLightbox(url, dlName, viewMeta));
+  const btnAsRef = $("btnAsRef");
+  if (btnAsRef) btnAsRef.addEventListener("click", () => addRefFromOutput(img.file));
 
   $("btnReuse").addEventListener("click", () => {
     $("prompt").value = p.prompt || "";
@@ -1066,20 +1170,45 @@ async function loadJobs() {
   $("historyEmpty").style.display = withImg.length ? "none" : "block";
   withImg.forEach((j) => {
     const p = j.params || {};
+    const imgEntry = j.images[0];
     const d = document.createElement("div");
     d.className = "thumb" + (j.id === state.shownJobId ? " active" : "");
-    const url = "/api/image?f=" + encodeURIComponent(j.images[0].file);
+    const url = "/api/image?f=" + encodeURIComponent(imgEntry.file);
     const fname = (p.seed != null ? "qwen21_seed" + p.seed : "qwen21") + ".png";
-    const vmeta = (p.width || "?") + " × " + (p.height || "?")
-      + (p.seed != null ? "  ·  seed " + p.seed : "")
-      + (p.mode === "edit" ? "  ·  图像编辑" : "  ·  文生图");
+    // 查看器标题不带尺寸：由 openLightbox 用图片真实像素现算
+    const vmeta = (p.seed != null ? "seed " + p.seed : "")
+      + (p.mode === "edit" ? "  ·  图像编辑" : (p.mode === "local" ? "  ·  局部编辑" : "  ·  文生图"));
     d.innerHTML = '<img src="' + url + '" loading="lazy" alt="">' +
-      '<button class="zoom" title="放大查看" aria-label="放大查看">⤢</button>' +
-      '<div class="cap">' + escapeHtml(p.width + "×" + p.height + " · seed " + p.seed) + '</div>';
+      '<div class="thumb-acts">' +
+        '<button class="tbtn as-ref" title="作为参考图" aria-label="作为参考图">＋</button>' +
+        '<button class="tbtn zoom" title="放大查看" aria-label="放大查看">⤢</button>' +
+      '</div>' +
+      '<div class="cap">' + escapeHtml((imgEntry.width && imgEntry.height)
+        ? imgEntry.width + "×" + imgEntry.height + " · seed " + p.seed
+        : "seed " + p.seed) + '</div>';
+
+    // ---- 尺寸收敛到实际图片：卡片文字在图片加载后用真实像素重写 ----
+    // 这样即使任务记录里的宽高不对（编辑模式下画布跟随 <image1> 就会不对），
+    // 卡片显示的也始终是图片文件本身的尺寸。
+    const im = d.querySelector("img");
+    const cap = d.querySelector(".cap");
+    const fixCap = () => {
+      const w = im.naturalWidth, h = im.naturalHeight;
+      if (!w || !h) return;
+      cap.textContent = w + "×" + h + " · seed " + p.seed;
+    };
+    if (im.complete) fixCap();
+    else im.addEventListener("load", fixCap);
+
     // 放大按钮：直接开查看器，不切换当前结果
     d.querySelector(".zoom").addEventListener("click", (e) => {
       e.stopPropagation();
       openLightbox(url, fname, vmeta);
+    });
+    // 「作为参考图」：一键把这张历史图追加到参考图队列
+    d.querySelector(".as-ref").addEventListener("click", (e) => {
+      e.stopPropagation();
+      addRefFromOutput(imgEntry.file);
     });
     d.addEventListener("click", () => {
       state.shownJobId = j.id;

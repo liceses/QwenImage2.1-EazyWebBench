@@ -552,6 +552,24 @@ def apply_transparency_template(prompt):
     return TRANSPARENT_PREFIX + p + TRANSPARENT_SUFFIX
 
 
+def png_size(path):
+    """读 PNG 的 IHDR，返回 (width, height)；不是 PNG / 读不到则返回 None。
+
+    为什么单独有这个函数：**尺寸的唯一来源应该是产物文件本身**。
+    曾经界面各处都在显示 params.width/height —— 而参考图编辑时画布跟随 <image1>，
+    params 里那对数字只是"界面上选了但不生效"的默认值，于是显示尺寸和真实图片不符
+    （实测 104 个任务里 35 个不一致，例如记录 1024×1024、实际 960×1568）。
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(33)
+    except OSError:
+        return None
+    if head[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return struct.unpack(">II", head[16:24])
+
+
 def png_alpha_stats(path, sample_rows=None):
     """读 PNG 的 alpha 统计：返回 dict 或 None（非 PNG / 无 alpha / 读不了）。
 
@@ -1170,10 +1188,15 @@ def run_job(job_id, params):
                     if not b:
                         break
                     fo.write(b)
-            local.append({
+            # 尺寸的唯一来源：产物文件本身（不是界面选的宽高）
+            real = png_size(dst)
+            entry = {
                 "file": f"{job_id}/{im['filename']}",
                 "comfy_ref": f"{im['subfolder']}/{im['filename']}" if im["subfolder"] else im["filename"],
-            })
+            }
+            if real:
+                entry["width"], entry["height"] = real
+            local.append(entry)
         except Exception as e:
             log(f"[{job_id}] 复制结果失败: {e}")
 
@@ -1402,6 +1425,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._handle_generate()
             if path == "/api/upload":
                 return self._handle_upload()
+            if path == "/api/ref-from-output":
+                return self._handle_ref_from_output()
             if path == "/api/cancel":
                 return self._handle_cancel()
             if path == "/api/merge-local":
@@ -1559,6 +1584,55 @@ class Handler(BaseHTTPRequestHandler):
             "size": len(filedata),
         })
 
+    def _handle_ref_from_output(self):
+        """把**已生成的产物**直接追加为参考图（一键入队）。
+
+        body: {"file": "<job_id>/<name>.png"}
+        返回与 /api/upload 同构，前端因此可以直接复用同一套入队逻辑。
+
+        为什么在服务端拷：产物本来就在本机 outputs/ 下，让 4 MB 的 PNG
+        绕浏览器一圈再传回来纯属浪费。拷进 uploads/ 与 ComfyUI input/ 后，
+        它就与"用户手动上传的参考图"完全等价（alpha 检测、LoadImage 都能用）。
+        """
+        raw = self._read_json()
+        rel = os.path.normpath(str(raw.get("file") or "")).replace("\\", "/")
+        if not rel or rel in (".", "..") or rel.startswith("../") or os.path.isabs(rel):
+            return self._error(400, "非法的图片路径")
+
+        src = os.path.join(OUTPUT_DIR, rel)
+        if not os.path.isfile(src):
+            return self._error(404, f"找不到这张图：{rel}")
+
+        ext = os.path.splitext(src)[1].lower() or ".png"
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
+            return self._error(400, f"不支持的图片格式：{ext}")
+        real = png_size(src)
+
+        safe_name = f"ref_{uuid.uuid4().hex[:10]}{ext}"
+        try:
+            import shutil
+            os.makedirs(UPLOAD_DIR, exist_ok=True)
+            shutil.copyfile(src, os.path.join(UPLOAD_DIR, safe_name))
+            size = os.path.getsize(src)
+        except Exception as e:
+            return self._error(500, f"加入参考图失败：{e}")
+
+        try:
+            os.makedirs(COMFY_INPUT, exist_ok=True)
+            shutil.copyfile(src, os.path.join(COMFY_INPUT, safe_name))
+        except Exception as e:
+            log(f"复制参考图到 ComfyUI input 失败: {e}")
+
+        payload = {
+            "ok": True, "name": safe_name,
+            "url": f"/api/upload-image?f={urllib.parse.quote(safe_name)}",
+            "size": size,
+        }
+        if real:
+            payload["width"], payload["height"] = real
+        log(f"已将产物 {rel} 追加为参考图：{safe_name}")
+        return self._json(200, payload)
+
     def _handle_cancel(self):
         raw = self._read_json()
         jid = raw.get("job_id")
@@ -1643,7 +1717,7 @@ class Handler(BaseHTTPRequestHandler):
                     "reference_images": [], "ref_has_alpha": False,
                     "transparent_bg": False, "custom_canvas": False, "ref_resolution": 0,
                 },
-                "images": [{"file": f"{job_id}/{name}"}],
+                "images": [{"file": f"{job_id}/{name}", "width": bw, "height": bh}],
                 "error": None, "elapsed": 0.0,
                 "created_at": time.time(),
             }

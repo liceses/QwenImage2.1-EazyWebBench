@@ -412,12 +412,24 @@ summary:hover{color:var(--md-primary)}
 
 /* ---------- 图片查看器（点击结果图放大） ---------- */
 .result-stage img{cursor:zoom-in}
-.thumb .zoom{position:absolute;top:4px;right:4px;width:26px;height:26px;min-width:0;padding:0;
-  border-radius:50%;display:grid;place-items:center;font-size:13px;line-height:1;
-  background:color-mix(in srgb,var(--md-scrim) 58%,transparent);color:#fff;opacity:0;
+/* 缩略图 hover 操作：＋ 作为参考图 / ⤢ 放大查看 */
+.thumb-acts{position:absolute;top:4px;right:4px;display:flex;gap:4px;opacity:0;
   transition:opacity var(--dur) var(--ease)}
-.thumb:hover .zoom,.thumb:focus-within .zoom{opacity:1}
-.thumb .zoom:hover:not(:disabled){background:var(--md-primary);color:var(--md-on-primary)}
+.thumb:hover .thumb-acts,.thumb:focus-within .thumb-acts{opacity:1}
+.tbtn{width:26px;height:26px;min-width:0;padding:0;border-radius:50%;
+  display:grid;place-items:center;font-size:13px;line-height:1;
+  background:color-mix(in srgb,var(--md-scrim) 58%,transparent);color:#fff}
+.tbtn:hover:not(:disabled){background:var(--md-primary);color:var(--md-on-primary)}
+
+/* ---------- 轻量反馈（右下角短暂提示，不打断操作） ---------- */
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,12px);
+  z-index:120;max-width:min(520px,88vw);padding:12px 20px;border-radius:var(--r-full);
+  background:var(--md-inverse-surface);color:var(--md-on-inverse-surface);
+  font-size:13px;box-shadow:var(--e3);opacity:0;pointer-events:none;
+  transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.ok{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container)}
+.toast.warn{background:var(--md-warn-container);color:var(--md-on-warn-container)}
 
 .viewer{position:fixed;inset:0;z-index:100;display:none;
   background:color-mix(in srgb,var(--md-scrim) 88%,transparent)}
