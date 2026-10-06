@@ -121,3 +121,6 @@ Thumbs.db
 # tools/diag/                 诊断与验收脚本，是文档里"结论可复现"的证据链
 # tools/_paths.py             共享路径解析，所有工具脚本依赖它
 # tools/download.py 等        他人跑起来必需的下载/自检工具
+# docs/screenshots/           README 用的界面截图（下面的 ! 例外把它们从 *.png 里放出来）
+!docs/screenshots/
+!docs/screenshots/*.png
